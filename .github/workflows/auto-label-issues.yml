@@ -1,0 +1,52 @@
+name: Auto-Label Issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    name: Apply label based on issue content
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Apply label by keyword match
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const title = context.payload.issue.title.toLowerCase();
+            const body  = (context.payload.issue.body || "").toLowerCase();
+            const text  = title + " " + body;
+
+            const labelMap = {
+              "bug":          ["bug", "error", "broken", "fail", "crash"],
+              "enhancement":  ["feature", "improve", "add", "enhance", "request"],
+              "documentation":["doc", "readme", "wiki", "typo"],
+              "question":     ["question", "how to", "help", "clarify"],
+            };
+
+            const toApply = [];
+            for (const [label, keywords] of Object.entries(labelMap)) {
+              if (keywords.some(kw => text.includes(kw))) {
+                toApply.push(label);
+              }
+            }
+
+            if (toApply.length > 0) {
+              await github.rest.issues.addLabels({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: context.issue.number,
+                labels:       toApply,
+              });
+              console.log(`Applied labels: ${toApply.join(", ")}`);
+            } else {
+              console.log("No matching labels found.");
+            }

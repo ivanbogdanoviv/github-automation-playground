@@ -1,0 +1,39 @@
+name: Weekly Repo Digest
+
+on:
+  schedule:
+    # Every Monday at 09:00 UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch:  # allow manual trigger for testing
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    name: Generate weekly activity summary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run digest script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_OWNER:   ${{ github.repository_owner }}
+          REPO_NAME:    ${{ github.event.repository.name }}
+        run: python scripts/repo_stats.py --owner "$REPO_OWNER" --repo "$REPO_NAME" --digest
+
+      - name: Write job summary
+        run: |
+          echo "## Weekly Digest Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Check the step logs above for the full activity report." >> $GITHUB_STEP_SUMMARY

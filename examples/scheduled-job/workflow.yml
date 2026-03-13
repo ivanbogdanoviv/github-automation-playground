@@ -1,0 +1,44 @@
+name: Scheduled Job Template
+
+# PURPOSE: Template for any task that needs to run on a cron schedule
+# with a manual trigger fallback for testing.
+
+on:
+  schedule:
+    # Runs at 08:00 UTC every weekday (Mon–Fri)
+    # Use https://crontab.guru to build/verify cron expressions
+    - cron: "0 8 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run without making changes"
+        required: false
+        default: "true"
+        type: boolean
+
+jobs:
+  scheduled-task:
+    name: Run scheduled task
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log run context
+        run: |
+          echo "Triggered by : ${{ github.event_name }}"
+          echo "Run at       : $(date -u)"
+          echo "Dry run      : ${{ inputs.dry_run || 'false' }}"
+
+      - name: Do the work
+        run: |
+          # TODO: Replace with your actual task
+          echo "Executing scheduled task..."
+
+      - name: Write summary
+        run: |
+          echo "## Scheduled Job Result" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: success" >> $GITHUB_STEP_SUMMARY
+          echo "- Time: $(date -u)" >> $GITHUB_STEP_SUMMARY

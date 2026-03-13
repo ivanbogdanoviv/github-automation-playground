@@ -1,0 +1,37 @@
+name: Matrix Build Example
+
+# PURPOSE: Demonstrates how to use a build matrix to test across
+# multiple operating systems and language versions in parallel.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }} / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Don't cancel all jobs if one fails
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: ["18", "20", "22"]
+        # Exclude a specific combo that is known unsupported
+        exclude:
+          - os: windows-latest
+            node-version: "18"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install and build
+        run: |
+          node --version
+          npm --version
+          echo "Build succeeded on ${{ matrix.os }} with Node ${{ matrix.node-version }}"
