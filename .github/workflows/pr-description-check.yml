@@ -1,0 +1,134 @@
+name: PR Description Check
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  check-description:
+    name: Validate PR description
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check PR description length
+        id: check
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = context.payload.pull_request.body || "";
+            const trimmed = body.trim();
+            const minLength = 50;
+
+            core.info(`PR body length: ${trimmed.length} characters`);
+            core.info(`Minimum required: ${minLength} characters`);
+
+            const isMissing = trimmed.length === 0;
+            const isTooShort = trimmed.length > 0 && trimmed.length < minLength;
+            const isValid = trimmed.length >= minLength;
+
+            core.setOutput("is_valid", isValid.toString());
+            core.setOutput("body_length", trimmed.length.toString());
+            core.setOutput("is_missing", isMissing.toString());
+            core.setOutput("is_too_short", isTooShort.toString());
+
+            return { isValid, trimmed, isMissing, isTooShort };
+
+      - name: Post failure comment if description is missing or too short
+        if: steps.check.outputs.is_valid == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const isMissing  = "${{ steps.check.outputs.is_missing }}" === "true";
+            const bodyLength = parseInt("${{ steps.check.outputs.body_length }}");
+            const minLength  = 50;
+            const remaining  = minLength - bodyLength;
+
+            const reason = isMissing
+              ? "**Your PR description is empty.**"
+              : `**Your PR description is too short** (${bodyLength} characters — need at least ${minLength}).`;
+
+            const comment = [
+              "## PR Description Required",
+              "",
+              `${reason}`,
+              "",
+              "Please update the PR description to include:",
+              "- **What** this PR does (summary of changes)",
+              "- **Why** these changes are needed",
+              "- **How** to test or verify the changes",
+              "",
+              isMissing
+                ? "Add a description to continue."
+                : `Add at least **${remaining} more character(s)** to meet the minimum requirement.`,
+              "",
+              "_This check will re-run automatically when you edit the PR description._",
+            ].join("\n");
+
+            // Find existing bot comment (avoid duplicates)
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const existing = comments.find(
+              (c) =>
+                c.user.type === "Bot" &&
+                c.body.includes("## PR Description Required")
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: comment,
+              });
+              core.info("Updated existing bot comment.");
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: comment,
+              });
+              core.info("Posted new comment.");
+            }
+
+      - name: Resolve comment if description is now valid
+        if: steps.check.outputs.is_valid == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const existing = comments.find(
+              (c) =>
+                c.user.type === "Bot" &&
+                c.body.includes("## PR Description Required")
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: "## PR Description Check Passed\n\nDescription looks good — thank you!",
+              });
+            }
+
+      - name: Fail if description invalid
+        if: steps.check.outputs.is_valid == 'false'
+        run: |
+          echo "::error::PR description is missing or too short (got ${{ steps.check.outputs.body_length }} chars, need 50)."
+          exit 1
