@@ -1,5 +1,13 @@
+# lint-and-test.yml
+# Runs linting (flake8) and the full test suite on every push to main/dev
+# and on every pull request targeting main.
+# Uses a matrix strategy to verify compatibility across Python 3.10, 3.11, and 3.12.
+
 name: Lint and Test
 
+# Trigger on pushes to main or dev branches, and on any PR targeting main.
+# This ensures code is validated both during active development (dev) and
+# before it lands in the production branch (main).
 on:
   push:
     branches: ["main", "dev"]
@@ -8,30 +16,43 @@ on:
 
 jobs:
   lint-and-test:
+    # Job name includes the matrix values so each run is clearly labelled in the UI
     name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
     strategy:
+      # fail-fast: true cancels all in-progress matrix jobs as soon as one fails.
+      # Set to false if you want to see results across ALL Python versions even when one fails.
       fail-fast: true
       matrix:
+        # Run only on ubuntu-latest to keep CI fast; add windows-latest/macos-latest if needed
         os: [ubuntu-latest]
+        # Test against all currently supported Python versions to catch compatibility issues early
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
+      # Check out the repository at the commit that triggered this workflow
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Install the specific Python version from the matrix.
+      # actions/setup-python caches the interpreter between runs automatically.
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Upgrade pip first to avoid issues with outdated resolver, then install
+      # flake8 for linting and all project dependencies from requirements.txt
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flake8
           pip install -r requirements.txt
 
+      # Two-pass linting strategy:
+      #   Pass 1 (blocking): fails the build on syntax errors and undefined names (E9, F63, F7, F82)
+      #   Pass 2 (advisory): reports style and complexity issues but does not fail the build (--exit-zero)
       - name: Lint with flake8
         run: |
           # Stop build on syntax errors or undefined names
@@ -39,6 +60,8 @@ jobs:
           # Warn on style issues (non-blocking)
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
 
+      # Run the full pytest suite with short tracebacks for readable CI output.
+      # -q (quiet) keeps the log concise; --tb=short shows enough context to diagnose failures.
       - name: Run tests
         run: |
           pytest --tb=short -q
