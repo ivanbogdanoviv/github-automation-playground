@@ -1,4 +1,34 @@
 #!/usr/bin/env python3
+# =============================================================================
+# repo_stats.py — GitHub Repository Activity Stats
+# =============================================================================
+# Purpose:
+#   Queries the GitHub REST API to produce an activity summary for any public
+#   or private repository. Designed for use in weekly digest workflows,
+#   CI/CD pipelines, and manual reporting from the command line.
+#
+# Usage:
+#   python repo_stats.py --owner <owner> --repo <repo>
+#   python repo_stats.py --owner <owner> --repo <repo> --digest
+#   python repo_stats.py --owner <owner> --repo <repo> --since 2026-01-01
+#   python repo_stats.py --owner <owner> --repo <repo> --json
+#
+# Required environment variables:
+#   GITHUB_TOKEN  — Personal access token with at least repo:read scope.
+#                   Without this, requests are unauthenticated (60 req/hr limit).
+#                   Set in .env or export before running.
+#
+# Optional environment variables:
+#   (none — all config is via CLI flags; see --help for full reference)
+#
+# Output modes:
+#   Default     : Colored terminal table (overview + recent activity)
+#   --digest    : Activity digest for the last 7 days (or --since window)
+#   --json      : Machine-readable JSON for piping into other tools
+#
+# Dependencies:
+#   pip install requests python-dotenv
+# =============================================================================
 """
 repo_stats.py — Query the GitHub API for repo activity stats.
 
