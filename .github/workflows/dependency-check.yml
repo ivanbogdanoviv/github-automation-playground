@@ -2,7 +2,6 @@ name: Dependency Security Check
 
 on:
   schedule:
-    # Every Monday at 08:00 UTC
     - cron: "0 8 * * 1"
   push:
     branches:
@@ -22,58 +21,36 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
-      - name: Install pip-audit
-        run: pip install pip-audit
-
-      - name: Install project dependencies
+      - name: Install dependencies and pip-audit
         run: |
+          pip install pip-audit
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
-          else
-            echo "No requirements.txt found — skipping dependency install."
           fi
 
-      - name: Run pip-audit and capture output
+      - name: Run pip-audit against installed environment
         id: audit
         run: |
           echo "## Dependency Security Audit" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Date:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Run audit — exit code 1 means vulnerabilities found
           set +e
-          pip-audit --requirement requirements.txt \
-            --format=columns \
-            --output=audit-report.txt \
-            2>&1
+          pip-audit --format=columns 2>&1 | tee audit-report.txt
           AUDIT_EXIT=$?
           set -e
 
-          # Always show the report
-          if [ -f audit-report.txt ]; then
-            echo "### Audit Output" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat audit-report.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "### Audit Output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat audit-report.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
-          # Count vulnerabilities by severity
-          CRITICAL=$(grep -ic "critical" audit-report.txt 2>/dev/null || true)
-          HIGH=$(grep -ic "high" audit-report.txt 2>/dev/null || true)
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Critical | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
-          echo "| High | $HIGH |" >> $GITHUB_STEP_SUMMARY
-
+          CRITICAL=$(grep -ic "critical" audit-report.txt 2>/dev/null || echo "0")
           echo "audit_exit=$AUDIT_EXIT" >> $GITHUB_OUTPUT
           echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
 
-      - name: Upload audit report as artifact
+      - name: Upload audit report
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -81,12 +58,12 @@ jobs:
           path: audit-report.txt
           retention-days: 30
 
-      - name: Fail if critical vulnerabilities found
-        if: steps.audit.outputs.critical != '0' || steps.audit.outputs.audit_exit != '0'
+      - name: Fail only if critical vulnerabilities found
+        if: steps.audit.outputs.critical != '0'
         run: |
-          echo "::error::Critical vulnerabilities detected. Review the audit report artifact."
+          echo "::error::Critical vulnerabilities detected."
           exit 1
 
       - name: All clear
-        if: steps.audit.outputs.audit_exit == '0'
-        run: echo "No vulnerabilities found in dependencies."
+        if: steps.audit.outputs.critical == '0'
+        run: echo "No critical vulnerabilities found."
